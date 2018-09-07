@@ -33,12 +33,12 @@ class Block extends React.Component {
         onLongPress    = { () => this.props.inactive || this.props.onLongPress() }
         onPress        = { () => this.props.inactive || this.props.onPress() }>
 
-          <View style={styles.itemImageContainer}>
-            <View style={ this.props.itemWrapperStyle }>
-              {this.props.children}
-            </View>
-            { this.props.deletionView }
+        <View style={styles.itemImageContainer}>
+          <View style={ this.props.itemWrapperStyle }>
+            {this.props.children}
           </View>
+          { this.props.deletionView }
+        </View>
 
       </TouchableWithoutFeedback>
     </Animated.View>
@@ -76,7 +76,7 @@ class SortableGrid extends React.Component {
       </Animated.View>
     );
   }
-      
+
 
   constructor() {
     super()
@@ -231,14 +231,14 @@ class SortableGrid extends React.Component {
   deleteBlock = () => {
     this.setState({ deleteBlock: this.state.activeBlock })
     this.blockAnimateFadeOut()
-    .then( () => {
-      let activeBlock = this.state.activeBlock
-      this.setState({ activeBlock: null, deleteBlock: null }, () => {
-        this.onDeleteItem({ item: this.itemOrder[ activeBlock ] })
-        this.deleteBlocks([ activeBlock ])
-        this.afterDragRelease()
+      .then( () => {
+        let activeBlock = this.state.activeBlock
+        this.setState({ activeBlock: null, deleteBlock: null }, () => {
+          this.onDeleteItem({ item: this.itemOrder[ activeBlock ] })
+          this.deleteBlocks([ activeBlock ])
+          this.afterDragRelease()
+        })
       })
-    })
   }
 
   blockAnimateFadeOut = () => {
@@ -380,37 +380,37 @@ class SortableGrid extends React.Component {
 
   _saveItemOrder = (items) => {
     items.forEach( (item, index) => {
-        const foundKey = _.findKey(this.itemOrder, oldItem => oldItem.key === item.key);
-        if (foundKey) {
-          this.items[foundKey] = item;
+      const foundKey = _.findKey(this.itemOrder, oldItem => oldItem.key === item.key);
+      if (foundKey) {
+        this.items[foundKey] = item;
+      }
+      else {
+        if (this.itemOrder[this.itemOrder.length - 1] && this.itemOrder[this.itemOrder.length - 1].key === 'footer_button') {
+          this.itemOrder.splice(
+            this.itemOrder.length - 1,
+            0 ,
+            { key: item.key, ref: item.ref, order: this.items.length - 1 });
+          this.itemOrder[this.itemOrder.length - 1].order = this.items.length;
+        } else {
+          this.itemOrder.push({ key: item.key, ref: item.ref, order: this.items.length });
+        }
+        if (!this.initialLayoutDone) {
+          this.items.push(item);
         }
         else {
-          if (this.itemOrder[this.itemOrder.length - 1] && this.itemOrder[this.itemOrder.length - 1].key === 'footer_button') {
-            this.itemOrder.splice(
-              this.itemOrder.length - 1,
-              0 ,
-              { key: item.key, ref: item.ref, order: this.items.length - 1 });
-            this.itemOrder[this.itemOrder.length - 1].order = this.items.length;
-          } else {
-            this.itemOrder.push({ key: item.key, ref: item.ref, order: this.items.length });
-          }
-          if (!this.initialLayoutDone) {
-            this.items.push(item);
-          }
-          else {
-            let blockPositions = this.state.blockPositions
-            let blockPositionsSetCount = ++this.state.blockPositionsSetCount
-            let thisPosition = this.getNextBlockCoordinates()
-            blockPositions.push({
-              currentPosition : new Animated.ValueXY( thisPosition ),
-              origin          : thisPosition,
-            })
-            this.items.push(item);
-            this.setState({ blockPositions, blockPositionsSetCount });
-            this.setGhostPositions()
-          }
+          let blockPositions = this.state.blockPositions
+          let blockPositionsSetCount = ++this.state.blockPositionsSetCount
+          let thisPosition = this.getNextBlockCoordinates()
+          blockPositions.push({
+            currentPosition : new Animated.ValueXY( thisPosition ),
+            origin          : thisPosition,
+          })
+          this.items.push(item);
+          this.setState({ blockPositions, blockPositionsSetCount });
+          this.setGhostPositions()
         }
-      })
+      }
+    })
   }
 
   _removeDisappearedChildren = (items) => {
@@ -426,30 +426,30 @@ class SortableGrid extends React.Component {
   }
 
   deleteBlocks = (deleteBlockIndices) => {
-      let blockPositions = this.state.blockPositions
-      let blockPositionsSetCount = this.state.blockPositionsSetCount
-      _.sortBy(deleteBlockIndices, index => -index).forEach(index => {
-        --blockPositionsSetCount
-        let order = this.itemOrder[index].order
-        let deletedPositions = blockPositions.splice(index, 1)
-        if (index === blockPositionsSetCount) {
-          this.itemOrder[index].order --
-          index --;
-        }
-        this._fixItemOrderOnDeletion(this.itemOrder[index])
-        this.itemOrder.splice(index, 1)
-        this.items.splice(index, 1)
-      })
+    let blockPositions = this.state.blockPositions
+    let blockPositionsSetCount = this.state.blockPositionsSetCount
+    _.sortBy(deleteBlockIndices, index => -index).forEach(index => {
+      --blockPositionsSetCount
+      let order = this.itemOrder[index].order
+      let deletedPositions = blockPositions.splice(index, 1)
+      if (index === blockPositionsSetCount) {
+        this.itemOrder[index].order --
+        index --;
+      }
+      this._fixItemOrderOnDeletion(this.itemOrder[index])
+      this.itemOrder.splice(index, 1)
+      this.items.splice(index, 1)
+    })
     this.setState({ blockPositions, blockPositionsSetCount }, () => {
-        this.items.forEach( (item, order) => {
-          let blockIndex = _.findIndex(this.itemOrder, item => item.order === order)
-          let x = (order * this.state.blockWidth) % (this.itemsPerRow * this.state.blockWidth)
-          let y = Math.floor(order / this.itemsPerRow) * (this.state.blockHeight + ROW_MARGIN)
-          this.state.blockPositions[blockIndex].origin = {x, y}
-          this.animateBlockMove(blockIndex, {x, y})
-        })
-      this.setGhostPositions()
+      this.items.forEach( (item, order) => {
+        let blockIndex = _.findIndex(this.itemOrder, item => item.order === order)
+        let x = (order * this.state.blockWidth) % (this.itemsPerRow * this.state.blockWidth)
+        let y = Math.floor(order / this.itemsPerRow) * (this.state.blockHeight + ROW_MARGIN)
+        this.state.blockPositions[blockIndex].origin = {x, y}
+        this.animateBlockMove(blockIndex, {x, y})
       })
+      this.setGhostPositions()
+    })
   }
 
   _fixItemOrderOnDeletion = (orderItem) => {
@@ -481,21 +481,29 @@ class SortableGrid extends React.Component {
 
   _defaultDragActivationWiggle = () => {
     if (!this.dragStartAnimation) {
-      this.state.startDragWiggle.setValue(20)
-      Animated.spring(this.state.startDragWiggle, {
-        toValue: 0,
-        velocity: 2000,
-        tension: 2000,
-        friction: 5
+      this.state.startDragWiggle.setValue(1)
+      Animated.timing(this.state.startDragWiggle, {
+        duration:100,
+        toValue:1.1,
       }).start()
     }
   }
 
   _blockActivationWiggle = () => {
     return this.dragStartAnimation ||
-    { transform: [{ rotate: this.state.startDragWiggle.interpolate({
-      inputRange:  [0, 360],
-      outputRange: ['0 deg', '360 deg']})}]}
+      { transform: [
+          {
+            scale:this.state.startDragWiggle
+          }
+        ],
+        shadowColor:'#000000',
+        shadowOpacity:0.2,
+        shadowRadius:6,
+        shadowOffset:{
+          width:1,
+          height:1,
+        },
+      }
   }
 
   _assignReceivedPropertiesIntoThis(properties) {
@@ -559,7 +567,7 @@ class SortableGrid extends React.Component {
 
   _getItemWrapperStyle = (key) => [
     { flex: 1 },
-       this.state.activeBlock == key
+    this.state.activeBlock == key
     && this.state.deleteModeOn
     && this._getBlock( key ).origin
     &&
@@ -610,23 +618,23 @@ class SortableGrid extends React.Component {
 }
 
 const styles = StyleSheet.create(
-{
-  sortableGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap'
-  },
-  deletedBlock: {
-    opacity: 0,
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    height: 0,
-    width: 0
-  },
-  itemImageContainer: {
-    flex: 1,
-    justifyContent: 'center'
-  }
-})
+  {
+    sortableGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap'
+    },
+    deletedBlock: {
+      opacity: 0,
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      height: 0,
+      width: 0
+    },
+    itemImageContainer: {
+      flex: 1,
+      justifyContent: 'center'
+    }
+  })
 
 module.exports = SortableGrid
