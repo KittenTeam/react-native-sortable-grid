@@ -57,7 +57,7 @@ class SortableGrid extends React.Component {
         this.items.map( (item, itemIndex) => {
             return (
               <Block
-                key={itemIndex}
+                key={item.key}
                 style = { this._getBlockStyle(itemIndex) }
                 onLayout = { this.saveBlockPositions(itemIndex) }
                 panHandlers = { this._panResponder.panHandlers }
@@ -105,6 +105,9 @@ class SortableGrid extends React.Component {
     this.items             = []
     this.initialLayoutDone = false
     this.initialDragDone   = false
+    this.firstInitDone     = false
+    this.resetOrder        = false
+    this.hadInitNewPositionsWhenAddItems  = true
 
     this.tapTimer          = null
     this.tapIgnore         = false
@@ -123,7 +126,8 @@ class SortableGrid extends React.Component {
       deletionSwipePercent: 0,
       deleteBlock: null,
       deleteBlockOpacity: new Animated.Value(1),
-      deletedItems: []
+      deletedItems: [],
+      hadInitNewPositionsWhenAddItems:true,
     }
   }
 
@@ -136,6 +140,13 @@ class SortableGrid extends React.Component {
   componentWillMount = () => this.createTouchHandlers()
 
   componentDidMount = () => this.handleNewProps(this.props)
+
+  shouldComponentUpdate = (nextProp, nextState) => {
+    if (!nextState.hadInitNewPositionsWhenAddItems) {
+      return false;
+    }
+    return true;
+  }
 
   componentWillUnmount = () => { if (this.tapTimer) clearTimeout(this.tapTimer) }
 
@@ -181,7 +192,7 @@ class SortableGrid extends React.Component {
         if (
           index !== this.state.activeBlock
           && block.origin
-          && index != (this.state.blockPositions.length - 1)
+          && this.items[index].key != 'footer_button'
         ) {
           let blockPosition = block.origin
           let distance = this._getDistanceTo(blockPosition)
@@ -201,21 +212,53 @@ class SortableGrid extends React.Component {
         }
       })
       if (closest !== this.state.activeBlock) {
-        Animated.timing(
-          this._getBlock(closest).currentPosition,
-          {
-            toValue: this._getActiveBlock().origin,
-            duration: this.blockTransitionDuration
+        const activeOrder = this.itemOrder[this.state.activeBlock].order;
+        const closestOrder = this.itemOrder[closest].order;
+        const oldOrigins = this.state.blockPositions.map((item) => {
+          return {
+            x:item.origin.x,
+            y:item.origin.y
+          };
+        })
+        let blockPositions = this.state.blockPositions;
+        let nextPosition = oldOrigins[this.state.activeBlock];
+        if (activeOrder > closestOrder) {
+          for (let i = activeOrder - 1; i >= closestOrder; i--) {
+            let itemOrderIndex = this.itemOrder.findIndex((item) => item.order === i );
+            this.itemOrder[itemOrderIndex].order ++;
+            let tmpPosition = blockPositions[itemOrderIndex].origin;
+            blockPositions[itemOrderIndex].origin = nextPosition;
+            Animated.timing(
+              this.state.blockPositions[itemOrderIndex].currentPosition,
+              {
+                toValue:nextPosition,
+                duration:this.blockTransitionDuration,
+              }
+            ).start();
+            nextPosition = tmpPosition;
           }
-        ).start()
-        let blockPositions = this.state.blockPositions
-        this._getActiveBlock().origin = blockPositions[closest].origin
-        blockPositions[closest].origin = originalPosition
-        this.setState({ blockPositions })
-
-        var tempOrderIndex = this.itemOrder[this.state.activeBlock].order
-        this.itemOrder[this.state.activeBlock].order = this.itemOrder[closest].order
-        this.itemOrder[closest].order = tempOrderIndex
+          this.itemOrder[this.state.activeBlock].order = closestOrder;
+          blockPositions[this.state.activeBlock].origin = nextPosition;
+          this.setState({blockPositions});
+        } else {
+          for (let i = activeOrder + 1;i <= closestOrder; i++) {
+            let itemOrderIndex = this.itemOrder.findIndex((item) => item.order === i );
+            this.itemOrder[itemOrderIndex].order --;
+            let tmpPosition = blockPositions[itemOrderIndex].origin;
+            blockPositions[itemOrderIndex].origin = nextPosition;
+            Animated.timing(
+              this.state.blockPositions[itemOrderIndex].currentPosition,
+              {
+                toValue:nextPosition,
+                duration:this.blockTransitionDuration,
+              }
+            ).start();
+            nextPosition = tmpPosition;
+          }
+          this.itemOrder[this.state.activeBlock].order = closestOrder;
+          blockPositions[this.state.activeBlock].origin = nextPosition;
+          this.setState({blockPositions});
+        }
       }
     }
   }
@@ -327,6 +370,7 @@ class SortableGrid extends React.Component {
       if (this._blockPositionsSet()) {
         this.setGhostPositions()
         this.initialLayoutDone = true
+        this.firstInitDone = true
       }
     }
   }
@@ -379,21 +423,25 @@ class SortableGrid extends React.Component {
   _blockPositionsSet = () => this.state.blockPositionsSetCount === this.items.length
 
   _saveItemOrder = (items) => {
+    const lastItemOrder = _.cloneDeep(this.itemOrder);
+    let hadInsert = false;
+    let hadInitNewPositionsWhenAddItems = true;
     items.forEach( (item, index) => {
       const foundKey = _.findKey(this.itemOrder, oldItem => oldItem.key === item.key);
       if (foundKey) {
+        if (this.firstInitDone) {
+          if (items.length === this.items.length) {
+            this.itemOrder[foundKey].order = index;
+          }
+        }
         this.items[foundKey] = item;
       }
       else {
-        if (this.itemOrder[this.itemOrder.length - 1] && this.itemOrder[this.itemOrder.length - 1].key === 'footer_button') {
-          this.itemOrder.splice(
-            this.itemOrder.length - 1,
-            0 ,
-            { key: item.key, ref: item.ref, order: this.items.length - 1 });
-          this.itemOrder[this.itemOrder.length - 1].order = this.items.length;
-        } else {
-          this.itemOrder.push({ key: item.key, ref: item.ref, order: this.items.length });
+        let order = this.items.length;
+        if (this.firstInitDone) {
+          order = index;
         }
+        this.itemOrder.push({ key: item.key, ref: item.ref, order});
         if (!this.initialLayoutDone) {
           this.items.push(item);
         }
@@ -406,11 +454,54 @@ class SortableGrid extends React.Component {
             origin          : thisPosition,
           })
           this.items.push(item);
-          this.setState({ blockPositions, blockPositionsSetCount });
+          if (this.firstInitDone) {
+            hadInitNewPositionsWhenAddItems = false;
+          }
+          this.setState({ blockPositions, blockPositionsSetCount, hadInitNewPositionsWhenAddItems});
           this.setGhostPositions()
         }
+        hadInsert = true;
       }
     })
+    if (this.firstInitDone && hadInsert) {
+      setTimeout(() => {
+        this.resetPositionsWhenResetItemOrder(lastItemOrder);
+      }, 0);
+    }
+  }
+
+  resetPositionsWhenResetItemOrder = (lastItemOrder) => {
+    this.resetOrder = true;
+    const oldOrigins = this.state.blockPositions.map((item) => {
+      return {
+        x:item.origin.x,
+        y:item.origin.y,
+      };
+    });
+
+    let blockPositions = this.state.blockPositions;
+    let newOrigins = Array.from({length:this.itemOrder.length});
+    let hadInsertFoot = false;
+    let insertIndex = lastItemOrder.length;
+    this.itemOrder.forEach((item, itemOrderIndex) => {
+      const lastIndex = _.findIndex(lastItemOrder, (lastItem) => lastItem.order === item.order);
+      if (lastIndex != -1) {
+        newOrigins[itemOrderIndex] = oldOrigins[lastIndex];
+      } else {
+        if (!hadInsertFoot) {
+          newOrigins[itemOrderIndex] = oldOrigins[oldOrigins.length - 1];
+          hadInsertFoot = true;
+        } else {
+          newOrigins[itemOrderIndex] = oldOrigins[insertIndex];
+          insertIndex ++;
+        }
+      }
+    });
+    newOrigins.forEach((origin, index) => {
+      blockPositions[index].origin = origin;
+      blockPositions[index].currentPosition.setValue(origin);
+    });
+    this.setState({blockPositions,hadInitNewPositionsWhenAddItems:true});
   }
 
   _removeDisappearedChildren = (items) => {
@@ -430,12 +521,7 @@ class SortableGrid extends React.Component {
     let blockPositionsSetCount = this.state.blockPositionsSetCount
     _.sortBy(deleteBlockIndices, index => -index).forEach(index => {
       --blockPositionsSetCount
-      let order = this.itemOrder[index].order
-      let deletedPositions = blockPositions.splice(index, 1)
-      if (index === blockPositionsSetCount) {
-        this.itemOrder[index].order --
-        index --;
-      }
+      blockPositions.splice(index, 1)
       this._fixItemOrderOnDeletion(this.itemOrder[index])
       this.itemOrder.splice(index, 1)
       this.items.splice(index, 1)
@@ -602,7 +688,7 @@ class SortableGrid extends React.Component {
         justifyContent: 'center',
         marginBottom:ROW_MARGIN,
       },
-      this._blockPositionsSet() && (this.initialDragDone || this.state.deleteModeOn) &&
+      this._blockPositionsSet() && (this.initialDragDone || this.state.deleteModeOn || this.resetOrder) &&
       {
         position: 'absolute',
         top: this._getBlock(key).currentPosition.getLayout().top,
