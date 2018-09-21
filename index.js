@@ -24,7 +24,7 @@ class Block extends React.Component {
   componentWillMount = () => {
     if (!this.props.isFirstAdded) {
       this.setState({
-        animatedValue: new Animated.Value(0.5),
+        animatedValue: new Animated.Value(0),
       });
     } else {
       this.setState({
@@ -37,6 +37,7 @@ class Block extends React.Component {
     Animated.timing(this.state.animatedValue, {
       duration:200,
       toValue:1,
+      delay:200,
     }).start()
   }
 
@@ -316,7 +317,7 @@ class SortableGrid extends React.Component {
     return new Promise( (resolve, reject) => {
       Animated.timing(
         this.state.deleteBlockScale,
-        { toValue: 0.5, duration: 200}
+        { toValue: 0, duration: 200}
       ).start(resolve)
     })
   }
