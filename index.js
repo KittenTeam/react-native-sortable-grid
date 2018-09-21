@@ -21,28 +21,54 @@ const ROW_MARGIN                      = 10
 
 class Block extends React.Component {
 
-  render = () =>
-    <Animated.View
-      style = { this.props.style }
-      onLayout = { this.props.onLayout }
-      {...this.props.panHandlers}
-    >
-      <TouchableWithoutFeedback
-        style          = {{ flex: 1 }}
-        delayLongPress = { this.props.delayLongPress }
-        onLongPress    = { () => this.props.inactive || this.props.onLongPress() }
-        onPress        = { () => this.props.inactive || this.props.onPress() }>
+  componentWillMount = () => {
+    if (!this.props.isFirstAdded) {
+      this.setState({
+        animatedValue: new Animated.Value(0.5),
+      });
+    } else {
+      this.setState({
+        animatedValue: new Animated.Value(1),
+      });
+    }
+  }
 
-        <View style={styles.itemImageContainer}>
-          <View style={ this.props.itemWrapperStyle }>
-            {this.props.children}
+  componentDidMount = () => {
+    Animated.timing(this.state.animatedValue, {
+      duration:200,
+      toValue:1,
+    }).start()
+  }
+
+  render = () => {
+    const animatedValue = {
+      transform:[
+        {scale:this.state.animatedValue},
+      ],
+    };
+    return (
+      <Animated.View
+        style = { [animatedValue, this.props.style] }
+        onLayout = { this.props.onLayout }
+        {...this.props.panHandlers}
+      >
+        <TouchableWithoutFeedback
+          style          = {{ flex: 1 }}
+          delayLongPress = { this.props.delayLongPress }
+          onLongPress    = { () => this.props.inactive || this.props.onLongPress() }
+          onPress        = { () => this.props.inactive || this.props.onPress() }>
+
+          <View style={styles.itemImageContainer}>
+            <View style={ this.props.itemWrapperStyle }>
+              {this.props.children}
+            </View>
+            { this.props.deletionView }
           </View>
-          { this.props.deletionView }
-        </View>
 
-      </TouchableWithoutFeedback>
-    </Animated.View>
-
+        </TouchableWithoutFeedback>
+      </Animated.View>
+    );
+  }
 }
 
 class SortableGrid extends React.Component {
@@ -67,6 +93,7 @@ class SortableGrid extends React.Component {
                 itemWrapperStyle = { this._getItemWrapperStyle(itemIndex) }
                 deletionView = { this._getDeletionView(itemIndex) }
                 inactive = { item.props.inactive }
+                isFirstAdded = {item.isFirstAdded}
               >
                 {item}
               </Block>
@@ -125,7 +152,7 @@ class SortableGrid extends React.Component {
       deleteModeOn: false,
       deletionSwipePercent: 0,
       deleteBlock: null,
-      deleteBlockOpacity: new Animated.Value(1),
+      deleteBlockScale: new Animated.Value(1),
       deletedItems: [],
       hadInitNewPositionsWhenAddItems:true,
     }
@@ -271,11 +298,11 @@ class SortableGrid extends React.Component {
       this.afterDragRelease()
   }
 
-  deleteBlock = () => {
-    this.setState({ deleteBlock: this.state.activeBlock })
+  deleteBlock = (deleteBlock) => {
+    let activeBlock = deleteBlock ? deleteBlock : this.state.activeBlock
+    this.setState({ deleteBlock: activeBlock })
     this.blockAnimateFadeOut()
       .then( () => {
-        let activeBlock = this.state.activeBlock
         this.setState({ activeBlock: null, deleteBlock: null }, () => {
           this.onDeleteItem({ item: this.itemOrder[ activeBlock ] })
           this.deleteBlocks([ activeBlock ])
@@ -285,11 +312,11 @@ class SortableGrid extends React.Component {
   }
 
   blockAnimateFadeOut = () => {
-    this.state.deleteBlockOpacity.setValue(1)
+    this.state.deleteBlockScale.setValue(1)
     return new Promise( (resolve, reject) => {
       Animated.timing(
-        this.state.deleteBlockOpacity,
-        { toValue: 0, duration: 2 * this.activeBlockCenteringDuration }
+        this.state.deleteBlockScale,
+        { toValue: 0.5, duration: 200}
       ).start(resolve)
     })
   }
@@ -443,7 +470,7 @@ class SortableGrid extends React.Component {
         }
         this.itemOrder.push({ key: item.key, ref: item.ref, order});
         if (!this.initialLayoutDone) {
-          this.items.push(item);
+          this.items.push({...item, isFirstAdded:true});
         }
         else {
           let blockPositions = this.state.blockPositions
@@ -453,7 +480,7 @@ class SortableGrid extends React.Component {
             currentPosition : new Animated.ValueXY( thisPosition ),
             origin          : thisPosition,
           })
-          this.items.push(item);
+          this.items.push({...item});
           if (this.firstInitDone) {
             hadInitNewPositionsWhenAddItems = false;
           }
@@ -512,7 +539,9 @@ class SortableGrid extends React.Component {
       }
     })
     if (deleteBlockIndices.length > 0) {
-      this.deleteBlocks(deleteBlockIndices)
+      deleteBlockIndices.forEach((deleteBlock) => {
+        this.deleteBlock([deleteBlock])
+      })
     }
   }
 
@@ -697,7 +726,11 @@ class SortableGrid extends React.Component {
       this.state.activeBlock == key && this._blockActivationWiggle(),
       this.state.activeBlock == key && {zIndex: 1},
       this.state.deleteBlock != null && {zIndex: 2},
-      this.state.deleteBlock == key && {opacity: this.state.deleteBlockOpacity},
+      this.state.deleteBlock == key && {
+      transform:[
+        {scale:this.state.deleteBlockScale,},
+      ],
+      },
       this.state.deletedItems.indexOf(key) !== -1 && styles.deletedBlock
     ]
   }
