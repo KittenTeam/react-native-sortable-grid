@@ -12,7 +12,7 @@ import _ from 'lodash'
 
 // Default values
 const ITEMS_PER_ROW                   = 4
-const DRAG_ACTIVATION_TRESHOLD        = 200 // Milliseconds
+const DRAG_ACTIVATION_TRESHOLD        = 350 // Milliseconds
 const BLOCK_TRANSITION_DURATION       = 300 // Milliseconds
 const ACTIVE_BLOCK_CENTERING_DURATION = 200 // Milliseconds
 const DOUBLETAP_TRESHOLD              = 150 // Milliseconds
@@ -359,12 +359,12 @@ class SortableGrid extends React.Component {
   assessGridSize = ({nativeEvent}) => {
     if (this.props.itemWidth && this.props.itemWidth < nativeEvent.layout.width) {
       this.itemsPerRow = Math.floor(nativeEvent.layout.width / this.props.itemWidth)
-      this.blockWidth = nativeEvent.layout.width / this.itemsPerRow
+      this.blockWidth = nativeEvent.layout.width / this.itemsPerRow - 2
       this.blockHeight = this.props.itemHeight || this.blockWidth
     }
     else {
-      this.blockWidth = nativeEvent.layout.width / this.itemsPerRow
-      this.blockHeight = this.blockWidth
+      this.blockWidth = nativeEvent.layout.width / this.itemsPerRow - 2
+      this.blockHeight = this.props.itemHeight || this.blockWidth
     }
     if (this.state.gridLayout != nativeEvent.layout) {
       this.setState({
@@ -575,7 +575,7 @@ class SortableGrid extends React.Component {
   }
 
   _animateGridHeight = () => {
-    this.gridHeightTarget = this.rows * this.state.blockHeight
+    this.gridHeightTarget = this.rows * this.state.blockHeight + 50
     if (this.gridHeightTarget === this.state.gridLayout.height || this.state.gridLayout.height === 0)
       this.state.gridHeight.setValue(this.gridHeightTarget)
     else if (this.state.gridHeight._value !== this.gridHeightTarget) {
@@ -670,11 +670,13 @@ class SortableGrid extends React.Component {
 
   // Style getters
 
-  _getGridStyle = () => [
-    styles.sortableGrid,
-    this.props.style,
-    this._blockPositionsSet() && { height: this.state.gridHeight }
-  ]
+  _getGridStyle = () => {
+    return [
+      styles.sortableGrid,
+      this._blockPositionsSet() && { height: this.state.gridHeight},
+      this.props.style,
+    ]
+  }
 
   _getDeletionView = (key) => {
     if (this.state.deleteModeOn)
