@@ -5,7 +5,8 @@ import {
   TouchableWithoutFeedback,
   PanResponder,
   Image,
-  View
+  View,
+  Platform,
 } from 'react-native'
 
 import _ from 'lodash'
@@ -17,14 +18,14 @@ const BLOCK_TRANSITION_DURATION       = 300 // Milliseconds
 const ACTIVE_BLOCK_CENTERING_DURATION = 200 // Milliseconds
 const DOUBLETAP_TRESHOLD              = 150 // Milliseconds
 const NULL_FN                         = () => {}
-const ROW_MARGIN                      = 10
+const ROW_MARGIN                      = 0
 
 class Block extends React.Component {
 
   componentWillMount = () => {
     if (!this.props.isFirstAdded) {
       this.setState({
-        animatedValue: new Animated.Value(0),
+        animatedValue: new Animated.Value(0.01),
       });
     } else {
       this.setState({
@@ -307,23 +308,38 @@ class SortableGrid extends React.Component {
         this.setState({ activeBlock: null, deleteBlock: null }, () => {
           this.onDeleteItem({ item: this.itemOrder[ activeBlock ] })
           this.deleteBlocks([ activeBlock ])
-          this.afterDragRelease()
         })
       })
   }
 
   blockAnimateFadeOut = () => {
     this.state.deleteBlockScale.setValue(1)
+    let toValue = {
+      toValue:0,
+      duration:200,
+    };
+    if (Platform.OS === 'android') {
+      toValue = {
+        toValue:0.01,
+        duration:350
+      };
+    }
     return new Promise( (resolve, reject) => {
       Animated.timing(
         this.state.deleteBlockScale,
-        { toValue: 0, duration: 200}
+        toValue,
       ).start(resolve)
     })
   }
 
   animateBlockMove = (blockIndex, position) => {
-    this._getBlock(blockIndex).currentPosition.setValue(position);
+    Animated.timing(
+      this._getBlock(blockIndex).currentPosition,
+      {
+        toValue:position,
+        duration:100,
+      }
+    ).start();
   }
 
   returnBlockToOriginalPosition = () => {
@@ -454,6 +470,7 @@ class SortableGrid extends React.Component {
     const lastItemOrder = _.cloneDeep(this.itemOrder);
     let hadInsert = false;
     let hadInitNewPositionsWhenAddItems = true;
+    const needRemoveItem = items.length <  this.items.length;
     items.forEach( (item, index) => {
       const foundKey = _.findKey(this.itemOrder, oldItem => oldItem.key === item.key);
       if (foundKey) {
@@ -491,7 +508,7 @@ class SortableGrid extends React.Component {
         hadInsert = true;
       }
     })
-    if (this.firstInitDone && hadInsert) {
+    if (this.firstInitDone && (hadInsert || needRemoveItem) ) {
       setTimeout(() => {
         this.resetPositionsWhenResetItemOrder(lastItemOrder);
       }, 0);
@@ -527,7 +544,13 @@ class SortableGrid extends React.Component {
     });
     newOrigins.forEach((origin, index) => {
       blockPositions[index].origin = origin;
-      blockPositions[index].currentPosition.setValue(origin);
+      Animated.timing(
+        blockPositions[index].currentPosition,
+        {
+          toValue:origin,
+          duration:200,
+        }
+      ).start();
     });
     this.setState({blockPositions,hadInitNewPositionsWhenAddItems:true});
   }
@@ -717,8 +740,6 @@ class SortableGrid extends React.Component {
       {
         width: this.state.blockWidth,
         height: this.state.blockHeight,
-        justifyContent: 'center',
-        marginBottom:ROW_MARGIN,
       },
       this._blockPositionsSet() && (this.initialDragDone || this.state.deleteModeOn || this.resetOrder) &&
       {
