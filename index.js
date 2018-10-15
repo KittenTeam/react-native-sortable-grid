@@ -79,7 +79,7 @@ class SortableGrid extends React.Component {
     return (
       <Animated.View
         style={ this._getGridStyle() }
-        onLayout={this.assessGridSize}
+        onLayout={this.onGridLayout}
       >
         { this.state.gridLayout &&
         this.items.map( (item, itemIndex) => {
@@ -158,6 +158,7 @@ class SortableGrid extends React.Component {
       deletedItems: [],
       hadInitNewPositionsWhenAddItems:true,
     }
+    this.debouncedAssessGridSize = _.debounce(this.assessGridSize, 200);
   }
 
   toggleDeleteMode = () => {
@@ -301,15 +302,14 @@ class SortableGrid extends React.Component {
   }
 
   deleteBlock = (deleteBlock) => {
-    let activeBlock = deleteBlock ? deleteBlock : this.state.activeBlock
-    this.setState({ deleteBlock: activeBlock })
-    this.blockAnimateFadeOut()
-      .then( () => {
-        this.setState({ activeBlock: null, deleteBlock: null }, () => {
-          this.onDeleteItem({ item: this.itemOrder[ activeBlock ] })
-          this.deleteBlocks([ activeBlock ])
-        })
-      })
+    this.setState({ deleteBlock, }, () => {
+      this.blockAnimateFadeOut()
+        .then( () => {
+          this.onDeleteItem({ item: this.itemOrder[ deleteBlock ] });
+          this.deleteBlocks([ deleteBlock ]);
+          this.setState({deleteBlock:null, activeBlock:null});
+        });
+    });
   }
 
   blockAnimateFadeOut = () => {
@@ -321,7 +321,7 @@ class SortableGrid extends React.Component {
     if (Platform.OS === 'android') {
       toValue = {
         toValue:0.01,
-        duration:350
+        duration:250
       };
     }
     return new Promise( (resolve, reject) => {
@@ -372,7 +372,16 @@ class SortableGrid extends React.Component {
     this.setState({deletionSwipePercent})
   }
 
-  assessGridSize = ({nativeEvent}) => {
+  onGridLayout = (params) => {
+    const nativeEvent = _.cloneDeep(params.nativeEvent);
+    if (this.firstInitDone) {
+      this.debouncedAssessGridSize(nativeEvent);
+    } else {
+      this.assessGridSize(nativeEvent);
+    }
+  }
+
+  assessGridSize = (nativeEvent) => {
     if (this.props.itemWidth && this.props.itemWidth < nativeEvent.layout.width) {
       this.itemsPerRow = Math.floor(nativeEvent.layout.width / this.props.itemWidth)
       this.blockWidth = nativeEvent.layout.width / this.itemsPerRow - 2
@@ -397,10 +406,12 @@ class SortableGrid extends React.Component {
     if (this.state.blockWidth && oldRows != this.rows) this._animateGridHeight()
   }
 
+  init_block_positions_set_count = 0;
+  init_block_positions = [];
   saveBlockPositions = (key) => ({nativeEvent}) => {
-    let blockPositions = this.state.blockPositions
+    let blockPositions = this.init_block_positions
     if (!blockPositions[key]) {
-      let blockPositionsSetCount = blockPositions[key] ? this.state.blockPositionsSetCount : ++this.state.blockPositionsSetCount
+      let blockPositionsSetCount = blockPositions[key] ? this.init_block_positions_set_count : ++this.init_block_positions_set_count
       let thisPosition = {
         x: nativeEvent.layout.x,
         y: nativeEvent.layout.y
@@ -409,9 +420,14 @@ class SortableGrid extends React.Component {
         currentPosition : new Animated.ValueXY( thisPosition ),
         origin          : thisPosition,
       }
-      this.setState({ blockPositions, blockPositionsSetCount  })
+      this.init_block_positions = blockPositions;
+      this.init_block_positions_set_count = blockPositionsSetCount;
 
-      if (this._blockPositionsSet()) {
+      if (blockPositionsSetCount === this.items.length) {
+        this.setState({
+          blockPositions,
+          blockPositionsSetCount,
+        })
         this.setGhostPositions()
         this.initialLayoutDone = true
         this.firstInitDone = true
@@ -471,6 +487,8 @@ class SortableGrid extends React.Component {
     let hadInsert = false;
     let hadInitNewPositionsWhenAddItems = true;
     const needRemoveItem = items.length <  this.items.length;
+    let blockPositions = this.state.blockPositions;
+    let blockPositionsSetCount= this.state.blockPositionsSetCount;
     items.forEach( (item, index) => {
       const foundKey = _.findKey(this.itemOrder, oldItem => oldItem.key === item.key);
       if (foundKey) {
@@ -491,8 +509,7 @@ class SortableGrid extends React.Component {
           this.items.push({...item, isFirstAdded:true});
         }
         else {
-          let blockPositions = this.state.blockPositions
-          let blockPositionsSetCount = ++this.state.blockPositionsSetCount
+          ++blockPositionsSetCount;
           let thisPosition = this.getNextBlockCoordinates()
           blockPositions.push({
             currentPosition : new Animated.ValueXY( thisPosition ),
@@ -502,12 +519,14 @@ class SortableGrid extends React.Component {
           if (this.firstInitDone) {
             hadInitNewPositionsWhenAddItems = false;
           }
-          this.setState({ blockPositions, blockPositionsSetCount, hadInitNewPositionsWhenAddItems});
           this.setGhostPositions()
         }
         hadInsert = true;
       }
     })
+    if (blockPositionsSetCount != this.state.blockPositionsSetCount) {
+      this.setState({ blockPositions, blockPositionsSetCount, hadInitNewPositionsWhenAddItems});
+    }
     if (this.firstInitDone && (hadInsert || needRemoveItem) ) {
       setTimeout(() => {
         this.resetPositionsWhenResetItemOrder(lastItemOrder);
