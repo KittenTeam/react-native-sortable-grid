@@ -528,7 +528,8 @@ class SortableGrid extends React.Component {
       this.setState({ blockPositions, blockPositionsSetCount, hadInitNewPositionsWhenAddItems});
     }
     if (this.firstInitDone && (hadInsert || needRemoveItem) ) {
-      setTimeout(() => {
+      this.resetPositionsWhenResetItemOrderTime && clearTimeout(this.resetPositionsWhenResetItemOrderTime);
+      this.resetPositionsWhenResetItemOrderTime = setTimeout(() => {
         this.resetPositionsWhenResetItemOrder(lastItemOrder);
       }, 0);
     }
@@ -563,13 +564,15 @@ class SortableGrid extends React.Component {
     });
     newOrigins.forEach((origin, index) => {
       blockPositions[index].origin = origin;
+      if (!origin) {
+        return;
+      }
       Animated.timing(
         blockPositions[index].currentPosition,
         {
           toValue:origin,
           duration:200,
-        }
-      ).start();
+        }).start();
     });
     this.setState({blockPositions,hadInitNewPositionsWhenAddItems:true});
   }
@@ -770,9 +773,9 @@ class SortableGrid extends React.Component {
       this.state.activeBlock == key && {zIndex: 1},
       this.state.deleteBlock != null && {zIndex: 2},
       this.state.deleteBlock == key && {
-      transform:[
-        {scale:this.state.deleteBlockScale,},
-      ],
+        transform:[
+          {scale:this.state.deleteBlockScale,},
+        ],
       },
       this.state.deletedItems.indexOf(key) !== -1 && styles.deletedBlock
     ]
