@@ -13,14 +13,14 @@ import _ from 'lodash'
 
 // Default values
 const ITEMS_PER_ROW                   = 4
-const DRAG_ACTIVATION_TRESHOLD        = 350 // Milliseconds
+const DRAG_ACTIVATION_TRESHOLD        = 1000 // Milliseconds
 const BLOCK_TRANSITION_DURATION       = 300 // Milliseconds
 const ACTIVE_BLOCK_CENTERING_DURATION = 200 // Milliseconds
 const DOUBLETAP_TRESHOLD              = 150 // Milliseconds
 const NULL_FN                         = () => {}
 const ROW_MARGIN                      = 0
 
-class Block extends React.Component {
+class Block extends React.PureComponent {
 
   componentWillMount = () => {
     if (!this.props.isFirstAdded) {
@@ -356,6 +356,9 @@ class SortableGrid extends React.Component {
 
   afterDragRelease = () => {
     let itemOrder = _.sortBy( this.itemOrder, item => item.order )
+    this.state.blockPositions.forEach((item) => {
+      item.currentPosition.flattenOffset();
+    })
     this.onDragRelease({ itemOrder })
     this.setState({ activeBlock: null })
     this.panCapture = false
