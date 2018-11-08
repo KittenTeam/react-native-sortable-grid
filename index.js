@@ -188,6 +188,148 @@ class SortableGrid extends React.Component {
     this._removeDisappearedChildren(properties.children)
   }
 
+  _saveItemOrder = (items) => {
+    const lastItemOrder = _.cloneDeep(this.itemOrder);
+    let hadInsert = false;
+    let hadInitNewPositionsWhenAddItems = true;
+    let blockPositions = this.state.blockPositions;
+    let blockPositionsSetCount= this.state.blockPositionsSetCount;
+    items.forEach( (item, index) => {
+      const foundKey = _.findKey(this.itemOrder, oldItem => oldItem.key === item.key);
+      if (foundKey) {
+        if (this.firstInitDone) {
+          if (items.length === this.items.length) {
+            this.itemOrder[foundKey].order = index;
+          }
+        }
+        this.items[foundKey] = item;
+      }
+      else {
+        let order = this.items.length;
+        if (this.firstInitDone) {
+          order = index;
+        }
+        this.itemOrder.push({ key: item.key, ref: item.ref, order});
+        if (!this.initialLayoutDone) {
+          this.items.push({...item, isFirstAdded:true});
+        }
+        else {
+          ++blockPositionsSetCount;
+          let thisPosition = this.getNextBlockCoordinates()
+          blockPositions.push({
+            currentPosition : new Animated.ValueXY( thisPosition ),
+            origin          : thisPosition,
+          })
+          this.items.push({...item});
+          if (this.firstInitDone) {
+            hadInitNewPositionsWhenAddItems = false;
+          }
+          this.setGhostPositions()
+        }
+        hadInsert = true;
+      }
+    })
+    if (blockPositionsSetCount != this.state.blockPositionsSetCount) {
+      this.setState({ blockPositions, blockPositionsSetCount, hadInitNewPositionsWhenAddItems});
+    }
+    if (this.firstInitDone && (hadInsert) ) {
+      this.resetPositionsWhenResetItemOrderTime && clearTimeout(this.resetPositionsWhenResetItemOrderTime);
+      this.resetPositionsWhenResetItemOrderTime = setTimeout(() => {
+        this.resetPositionsWhenResetItemOrder(lastItemOrder);
+      }, 0);
+    }
+  }
+
+  _removeDisappearedChildren = (items) => {
+    let deleteBlockIndices = []
+    _.cloneDeep(this.itemOrder).forEach( (item, index) => {
+      if (!_.findKey(items, (oldItem) => oldItem.key === item.key)) {
+        deleteBlockIndices.push(index)
+      }
+    })
+    if (deleteBlockIndices.length > 0) {
+      deleteBlockIndices.forEach((deleteBlock) => {
+        this.deleteBlock([deleteBlock])
+      })
+    }
+  }
+
+
+  deleteBlock = (deleteBlock) => {
+    this.setState({ deleteBlock, }, () => {
+      this.blockAnimateFadeOut()
+        .then( () => {
+          this.onDeleteItem({ item: this.itemOrder[ deleteBlock ] });
+          this.deleteBlocks([ deleteBlock ]);
+          this.setState({deleteBlock:null, activeBlock:null});
+        });
+    });
+  }
+
+  deleteBlocks = (deleteBlockIndices) => {
+    let blockPositions = this.state.blockPositions
+    let blockPositionsSetCount = this.state.blockPositionsSetCount
+    _.sortBy(deleteBlockIndices, index => -index).forEach(index => {
+      --blockPositionsSetCount
+      blockPositions.splice(index, 1)
+      this._fixItemOrderOnDeletion(this.itemOrder[index])
+      this.itemOrder.splice(index, 1)
+      this.items.splice(index, 1)
+    })
+    this.setState({ blockPositions, blockPositionsSetCount }, () => {
+      this.items.forEach( (item, order) => {
+        let blockIndex = _.findIndex(this.itemOrder, item => item.order === order)
+        let x = (order * this.state.blockWidth) % (this.itemsPerRow * this.state.blockWidth)
+        let y = Math.floor(order / this.itemsPerRow) * (this.state.blockHeight + ROW_MARGIN)
+        this.state.blockPositions[blockIndex].origin = {x, y}
+        this.animateBlockMove(blockIndex, {x, y})
+      })
+      this.setGhostPositions()
+    })
+  }
+
+  resetPositionsWhenResetItemOrder = (lastItemOrder) => {
+    this.resetOrder = true;
+    const oldOrigins = this.state.blockPositions.map((item) => {
+      return {
+        x:item.origin.x,
+        y:item.origin.y,
+      };
+    });
+
+    let blockPositions = this.state.blockPositions;
+    let newOrigins = Array.from({length:this.itemOrder.length});
+    let hadInsertFoot = false;
+    let insertIndex = lastItemOrder.length;
+    this.itemOrder.forEach((item, itemOrderIndex) => {
+      const lastIndex = _.findIndex(lastItemOrder, (lastItem) => lastItem.order === item.order);
+      if (lastIndex != -1) {
+        newOrigins[itemOrderIndex] = oldOrigins[lastIndex];
+      } else {
+        if (!hadInsertFoot) {
+          newOrigins[itemOrderIndex] = oldOrigins[oldOrigins.length - 1];
+          hadInsertFoot = true;
+        } else {
+          newOrigins[itemOrderIndex] = oldOrigins[insertIndex];
+          insertIndex ++;
+        }
+      }
+    });
+    newOrigins.forEach((origin, index) => {
+      blockPositions[index].origin = origin;
+      if (!origin) {
+        return;
+      }
+      Animated.timing(
+        blockPositions[index].currentPosition,
+        {
+          toValue:origin,
+          duration:200,
+        }).start();
+    });
+    this.setState({blockPositions,hadInitNewPositionsWhenAddItems:true});
+  }
+
   onStartDrag = (evt, gestureState) => {
     if (this.state.activeBlock != null) {
       let activeBlockPosition = this._getActiveBlock().origin
@@ -299,17 +441,6 @@ class SortableGrid extends React.Component {
       this.deleteBlock()
     else
       this.afterDragRelease()
-  }
-
-  deleteBlock = (deleteBlock) => {
-    this.setState({ deleteBlock, }, () => {
-      this.blockAnimateFadeOut()
-        .then( () => {
-          this.onDeleteItem({ item: this.itemOrder[ deleteBlock ] });
-          this.deleteBlocks([ deleteBlock ]);
-          this.setState({deleteBlock:null, activeBlock:null});
-        });
-    });
   }
 
   blockAnimateFadeOut = () => {
@@ -484,137 +615,6 @@ class SortableGrid extends React.Component {
   _getBlock = (blockIndex) => this.state.blockPositions[ blockIndex ]
 
   _blockPositionsSet = () => this.state.blockPositionsSetCount === this.items.length
-
-  _saveItemOrder = (items) => {
-    const lastItemOrder = _.cloneDeep(this.itemOrder);
-    let hadInsert = false;
-    let hadInitNewPositionsWhenAddItems = true;
-    const needRemoveItem = items.length <  this.items.length;
-    let blockPositions = this.state.blockPositions;
-    let blockPositionsSetCount= this.state.blockPositionsSetCount;
-    items.forEach( (item, index) => {
-      const foundKey = _.findKey(this.itemOrder, oldItem => oldItem.key === item.key);
-      if (foundKey) {
-        if (this.firstInitDone) {
-          if (items.length === this.items.length) {
-            this.itemOrder[foundKey].order = index;
-          }
-        }
-        this.items[foundKey] = item;
-      }
-      else {
-        let order = this.items.length;
-        if (this.firstInitDone) {
-          order = index;
-        }
-        this.itemOrder.push({ key: item.key, ref: item.ref, order});
-        if (!this.initialLayoutDone) {
-          this.items.push({...item, isFirstAdded:true});
-        }
-        else {
-          ++blockPositionsSetCount;
-          let thisPosition = this.getNextBlockCoordinates()
-          blockPositions.push({
-            currentPosition : new Animated.ValueXY( thisPosition ),
-            origin          : thisPosition,
-          })
-          this.items.push({...item});
-          if (this.firstInitDone) {
-            hadInitNewPositionsWhenAddItems = false;
-          }
-          this.setGhostPositions()
-        }
-        hadInsert = true;
-      }
-    })
-    if (blockPositionsSetCount != this.state.blockPositionsSetCount) {
-      this.setState({ blockPositions, blockPositionsSetCount, hadInitNewPositionsWhenAddItems});
-    }
-    if (this.firstInitDone && (hadInsert || needRemoveItem) ) {
-      this.resetPositionsWhenResetItemOrderTime && clearTimeout(this.resetPositionsWhenResetItemOrderTime);
-      this.resetPositionsWhenResetItemOrderTime = setTimeout(() => {
-        this.resetPositionsWhenResetItemOrder(lastItemOrder);
-      }, 0);
-    }
-  }
-
-  resetPositionsWhenResetItemOrder = (lastItemOrder) => {
-    this.resetOrder = true;
-    const oldOrigins = this.state.blockPositions.map((item) => {
-      return {
-        x:item.origin.x,
-        y:item.origin.y,
-      };
-    });
-
-    let blockPositions = this.state.blockPositions;
-    let newOrigins = Array.from({length:this.itemOrder.length});
-    let hadInsertFoot = false;
-    let insertIndex = lastItemOrder.length;
-    this.itemOrder.forEach((item, itemOrderIndex) => {
-      const lastIndex = _.findIndex(lastItemOrder, (lastItem) => lastItem.order === item.order);
-      if (lastIndex != -1) {
-        newOrigins[itemOrderIndex] = oldOrigins[lastIndex];
-      } else {
-        if (!hadInsertFoot) {
-          newOrigins[itemOrderIndex] = oldOrigins[oldOrigins.length - 1];
-          hadInsertFoot = true;
-        } else {
-          newOrigins[itemOrderIndex] = oldOrigins[insertIndex];
-          insertIndex ++;
-        }
-      }
-    });
-    newOrigins.forEach((origin, index) => {
-      blockPositions[index].origin = origin;
-      if (!origin) {
-        return;
-      }
-      Animated.timing(
-        blockPositions[index].currentPosition,
-        {
-          toValue:origin,
-          duration:200,
-        }).start();
-    });
-    this.setState({blockPositions,hadInitNewPositionsWhenAddItems:true});
-  }
-
-  _removeDisappearedChildren = (items) => {
-    let deleteBlockIndices = []
-    _.cloneDeep(this.itemOrder).forEach( (item, index) => {
-      if (!_.findKey(items, (oldItem) => oldItem.key === item.key)) {
-        deleteBlockIndices.push(index)
-      }
-    })
-    if (deleteBlockIndices.length > 0) {
-      deleteBlockIndices.forEach((deleteBlock) => {
-        this.deleteBlock([deleteBlock])
-      })
-    }
-  }
-
-  deleteBlocks = (deleteBlockIndices) => {
-    let blockPositions = this.state.blockPositions
-    let blockPositionsSetCount = this.state.blockPositionsSetCount
-    _.sortBy(deleteBlockIndices, index => -index).forEach(index => {
-      --blockPositionsSetCount
-      blockPositions.splice(index, 1)
-      this._fixItemOrderOnDeletion(this.itemOrder[index])
-      this.itemOrder.splice(index, 1)
-      this.items.splice(index, 1)
-    })
-    this.setState({ blockPositions, blockPositionsSetCount }, () => {
-      this.items.forEach( (item, order) => {
-        let blockIndex = _.findIndex(this.itemOrder, item => item.order === order)
-        let x = (order * this.state.blockWidth) % (this.itemsPerRow * this.state.blockWidth)
-        let y = Math.floor(order / this.itemsPerRow) * (this.state.blockHeight + ROW_MARGIN)
-        this.state.blockPositions[blockIndex].origin = {x, y}
-        this.animateBlockMove(blockIndex, {x, y})
-      })
-      this.setGhostPositions()
-    })
-  }
 
   _fixItemOrderOnDeletion = (orderItem) => {
     if (!orderItem) return false
