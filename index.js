@@ -279,7 +279,8 @@ class SortableGrid extends React.Component {
     this.setState({ blockPositions, blockPositionsSetCount }, () => {
       this.items.forEach( (item, order) => {
         let blockIndex = _.findIndex(this.itemOrder, item => item.order === order)
-        let x = (order * this.state.blockWidth) % (this.itemsPerRow * this.state.blockWidth)
+        const columnOnRow = order % this.itemsPerRow;
+        const x = columnOnRow * this.state.blockWidth;
         let y = Math.floor(order / this.itemsPerRow) * (this.state.blockHeight + ROW_MARGIN)
         this.state.blockPositions[blockIndex].origin = {x, y}
         this.animateBlockMove(blockIndex, {x, y})
