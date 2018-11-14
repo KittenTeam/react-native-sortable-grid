@@ -249,7 +249,7 @@ class SortableGrid extends React.Component {
     })
     if (deleteBlockIndices.length > 0) {
       deleteBlockIndices.forEach((deleteBlock) => {
-        this.deleteBlock([deleteBlock])
+        this.deleteBlock(deleteBlock)
       })
     }
   }
@@ -270,13 +270,14 @@ class SortableGrid extends React.Component {
     let blockPositions = this.state.blockPositions
     let blockPositionsSetCount = this.state.blockPositionsSetCount
     _.sortBy(deleteBlockIndices, index => -index).forEach(index => {
-      --blockPositionsSetCount
       blockPositions.splice(index, 1)
       this._fixItemOrderOnDeletion(this.itemOrder[index])
       this.itemOrder.splice(index, 1)
       this.items.splice(index, 1)
     })
+    blockPositionsSetCount = blockPositions.length;
     this.setState({ blockPositions, blockPositionsSetCount }, () => {
+      this.resetOrder = true;
       this.items.forEach( (item, order) => {
         let blockIndex = _.findIndex(this.itemOrder, item => item.order === order)
         const columnOnRow = order % this.itemsPerRow;
