@@ -242,26 +242,33 @@ class SortableGrid extends React.Component {
 
   _removeDisappearedChildren = (items) => {
     let deleteBlockIndices = []
-    _.cloneDeep(this.itemOrder).forEach( (item, index) => {
+    this.itemOrder.forEach( (item, index) => {
       if (!_.findKey(items, (oldItem) => oldItem.key === item.key)) {
         deleteBlockIndices.push(index)
       }
     })
     if (deleteBlockIndices.length > 0) {
       deleteBlockIndices.forEach((deleteBlock) => {
-        this.deleteBlock(deleteBlock)
+        if (!this.is_deleting) {
+          this.deleteBlock(deleteBlock);
+        }
       })
     }
   }
 
+  is_deleting = false;
+
 
   deleteBlock = (deleteBlock) => {
+    this.is_deleting = true;
     this.setState({ deleteBlock, }, () => {
       this.blockAnimateFadeOut()
         .then( () => {
           this.onDeleteItem({ item: this.itemOrder[ deleteBlock ] });
           this.deleteBlocks([ deleteBlock ]);
-          this.setState({deleteBlock:null, activeBlock:null});
+          this.setState({deleteBlock:null, activeBlock:null}, () => {
+            this.is_deleting = false;
+          });
         });
     });
   }
